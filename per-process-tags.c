@@ -1,10 +1,13 @@
 #include "linux/array_size.h"
 #include "linux/gfp_types.h"
 #include "linux/kern_levels.h"
+#include "linux/rculist.h"
+#include "linux/rcupdate.h"
 #include <asm/current.h>
 #include <linux/fs.h>
 #include <linux/hashtable.h>
 #include <linux/init.h>
+#include <linux/list.h>
 #include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <linux/uaccess.h>
@@ -25,13 +28,23 @@ DEFINE_HASHTABLE(ppt_table, 6);
 static ssize_t ppt_write(struct file *file, const char __user *ubuf,
                          size_t count, loff_t *ppos) {
   const pid_t pid = current->pid;
-  struct ppt_entry *p_entry = kzalloc(sizeof(struct ppt_entry), GFP_KERNEL);
-  p_entry->pid = pid;
-  if (copy_from_user(p_entry->tag, ubuf, count)) {
+  struct ppt_entry *new_entry = kzalloc(sizeof(struct ppt_entry), GFP_KERNEL);
+  struct ppt_entry *current_entry;
+  new_entry->pid = pid;
+  if (copy_from_user(new_entry->tag, ubuf, count)) {
     return -EFAULT;
   }
-  p_entry->tag[255] = '\0';
-  hash_add_rcu(ppt_table, &p_entry->next, pid);
+  new_entry->tag[255] = '\0';
+  hash_for_each_possible_rcu(ppt_table, current_entry, next, pid) {
+    if (current_entry->pid == pid) {
+      hlist_replace_rcu(&current_entry->next, &new_entry->next);
+      synchronize_rcu();
+      kfree(current_entry);
+      goto done;
+    }
+  }
+  hash_add_rcu(ppt_table, &new_entry->next, pid);
+done:
   return count;
 }
 
