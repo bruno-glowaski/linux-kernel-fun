@@ -17,6 +17,9 @@ MODULE_DESCRIPTION("An experiment on storing independent per-process data "
                    "without modifying the main kernel.");
 MODULE_LICENSE("GPL");
 
+#define PROC_NAME "ppt"
+#define PROC_MODE 0666
+
 struct ppt_entry {
   pid_t pid;
   char tag[256];
@@ -84,9 +87,10 @@ static struct proc_dir_entry *ppt_dentry;
 
 static int __init ppt_init(void) {
   hash_init(ppt_table);
-  ppt_dentry = proc_create("ppt", 0666, NULL, &ppt_fops);
+  ppt_dentry = proc_create(PROC_NAME, PROC_MODE, NULL, &ppt_fops);
   return 0;
 }
+
 static void __exit ppt_exit(void) {
   size_t bkt;
   struct hlist_node *tmp;
