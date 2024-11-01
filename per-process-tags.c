@@ -74,7 +74,15 @@ static int __init ppt_init(void) {
   ppt_dentry = proc_create("ppt", 0666, NULL, &ppt_fops);
   return 0;
 }
-static void __exit ppt_exit(void) { proc_remove(ppt_dentry); }
+static void __exit ppt_exit(void) {
+  size_t bkt;
+  struct hlist_node *tmp;
+  struct ppt_entry *entry;
+  proc_remove(ppt_dentry);
+  hash_for_each_safe(ppt_table, bkt, tmp, entry, next) {
+    hash_del_rcu(&entry->next);
+  }
+}
 
 module_init(ppt_init);
 module_exit(ppt_exit);
