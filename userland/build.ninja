@@ -1,0 +1,6 @@
+cflags = -Wall
+
+rule cc
+  command = gcc $cflags $in -o $out.out
+
+build fibonacci-deferred: cc fibonacci-deferred.c
