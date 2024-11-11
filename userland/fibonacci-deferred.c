@@ -35,12 +35,12 @@ int main(void) {
   memset(page, 0, page_size);
 
   printf("Opening device...\n");
-  device = open(DEVICE_PATH, O_RDONLY);
+  device = open(DEVICE_PATH, O_RDWR);
   if (device < 0) {
     err(errno, NULL);
   }
 
-  printf("Sending command using destination %p (at %p)...\n", page, &page);
+  printf("Sending command using destination %p (%li)...\n", page, (long)page);
   r = ioctl(device, DISPATCH_CMD, page);
   if (r < 0) {
     err(errno, NULL);

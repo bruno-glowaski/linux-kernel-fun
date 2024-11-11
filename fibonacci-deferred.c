@@ -31,10 +31,13 @@ static int fib_kthread(void __user *data) {
   struct page *page;
   struct fib_page *dst;
   size_t i;
+  long r;
 
-  printk(KERN_INFO "Mapping page into kernel space...\n");
-  if (get_user_pages((long)data, 1, FOLL_LONGTERM, &page) < 1) {
-    printk(KERN_INFO "Failed to get user pages...\n");
+  printk(KERN_INFO "Mapping page into kernel space...\n", data, (long)data,
+         &page);
+
+  if ((r = get_user_pages((long)data, 1, 1, &page)) < 1) {
+    printk(KERN_INFO "Failed to get user pages... Return %li\n", r);
     return -1;
   }
   if ((dst = vmap(&page, 1, VM_WRITE | VM_READ, PAGE_KERNEL)) == NULL) {
@@ -47,9 +50,9 @@ static int fib_kthread(void __user *data) {
          dst, &dst->count, &dst->values);
 
   printk(KERN_INFO "Setting initial values...\n");
+  atomic_set(&dst->count, 2);
   dst->values[0] = 1;
   dst->values[1] = 1;
-  atomic_set(&dst->count, 2);
   schedule();
 
   printk(KERN_INFO "Setting other values...\n");
@@ -60,7 +63,7 @@ static int fib_kthread(void __user *data) {
     schedule();
   }
 
-  kunmap_local(dst);
+  vunmap(dst);
   unpin_user_page(page);
   return 0;
 }
