@@ -27,32 +27,32 @@ static struct cdev fib_cdev;
 
 #define THREAD_NAME "deferred_fibonacci"
 
-static int fib_kthread(void __user *data) {
+struct fib_task {
   struct page *page;
   struct fib_page *dst;
+};
+
+static int fib_kthread(void *data) {
+  struct fib_task *task = (struct fib_task *)data;
+  struct page *page = task->page;
+  struct fib_page *dst = task->dst;
   size_t i;
-  long r;
 
-  printk(KERN_INFO "Mapping page into kernel space...\n", data, (long)data,
-         &page);
+  printk(KERN_INFO "Deallocating task struct...\n");
+  kfree(task);
 
-  if ((r = get_user_pages((long)data, 1, 1, &page)) < 1) {
-    printk(KERN_INFO "Failed to get user pages... Return %li\n", r);
-    return -1;
-  }
-  if ((dst = vmap(&page, 1, VM_WRITE | VM_READ, PAGE_KERNEL)) == NULL) {
-    printk(KERN_INFO "Failed to vmap pages...\n");
-    return -1;
-  }
-  printk(KERN_INFO "Values offset %li", offsetof(struct fib_page, values));
-  printk(KERN_INFO "Mappped to addresses: Base -> %p; Count -> %p; Values -> "
-                   "%p;",
+  printk(KERN_INFO "Mappped to addresses: Base -> %px; Count -> %px; Values -> "
+                   "%px;\n",
          dst, &dst->count, &dst->values);
 
   printk(KERN_INFO "Setting initial values...\n");
   atomic_set(&dst->count, 2);
+  printk(KERN_INFO "Count set!\n");
   dst->values[0] = 1;
+  printk(KERN_INFO "fib[0] set!\n");
   dst->values[1] = 1;
+  printk(KERN_INFO "fib[1] set!\n");
+  printk(KERN_INFO "Scheduling...\n");
   schedule();
 
   printk(KERN_INFO "Setting other values...\n");
@@ -60,6 +60,7 @@ static int fib_kthread(void __user *data) {
     printk(KERN_INFO "Writting fib[%li]...\n", i);
     dst->values[i] = dst->values[i - 1] + dst->values[i - 2];
     atomic_fetch_inc_release(&dst->count);
+    printk(KERN_INFO "Scheduling...\n");
     schedule();
   }
 
@@ -67,21 +68,52 @@ static int fib_kthread(void __user *data) {
   unpin_user_page(page);
   return 0;
 }
-
 static long fib_ioctl(struct file *file, unsigned int request,
                       unsigned long param) {
-  printk(KERN_INFO "Received request with address %p (%li)\n",
-         (void __user *)param, param);
+  void __user *usr_addr = (void __user *)param;
+  struct fib_task *task;
+  long r;
+
+  printk(KERN_INFO "Received request with address %px.\n", usr_addr);
   if (param % PAGE_SIZE != 0) {
     printk(KERN_INFO "Error: invalid page aligment\n");
-    return -EFAULT;
+    return -EINVAL;
   }
-  if (!access_ok((void __user *)param, PAGE_SIZE)) {
+
+  if (!access_ok(usr_addr, PAGE_SIZE)) {
     printk(KERN_INFO "Error: unauthorized memory region\n");
-    return -EFAULT;
+    return -EACCES;
   }
-  kthread_run(fib_kthread, (void __user *)param, THREAD_NAME);
+
+  printk(KERN_INFO "Allocating task struct...\n");
+  if ((task = kmalloc(sizeof(struct fib_task), GFP_KERNEL)) == NULL) {
+    printk(KERN_INFO "Failed to allocate task struct...\n");
+    return -ENOMEM;
+  }
+
+  printk(KERN_INFO "Mapping page at %px into kernel space...\n", usr_addr);
+  if ((r = pin_user_pages_fast(param, 1, FOLL_LONGTERM | FOLL_WRITE,
+                               &task->page)) < 1) {
+    printk(KERN_INFO "Failed to get user pages... Return %li\n", r);
+    goto error_with_alloc;
+  }
+
+  if ((task->dst = vmap(&task->page, 1, VM_WRITE | VM_READ, PAGE_SHARED)) ==
+      NULL) {
+    printk(KERN_INFO "Failed to vmap pages...\n");
+    r = -ENOMEM;
+    goto error_with_pinned_page;
+  }
+
+  kthread_run(fib_kthread, task, THREAD_NAME);
+
   return 0;
+
+error_with_pinned_page:
+  unpin_user_page(task->page);
+error_with_alloc:
+  kfree(task);
+  return r;
 }
 
 static struct file_operations fops = {
