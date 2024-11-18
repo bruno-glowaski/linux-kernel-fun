@@ -5,9 +5,9 @@ set -e
 configs_dir="${PWD}/configs"
 linux_config="${configs_dir}/linux.config"
 busybox_config="${configs_dir}/busybox.config"
-init_script="${configs_dir}/initrc"
+init_script="${configs_dir}/init"
 build_dir="${PWD}/build"
-qemu_params="-enable-kvm -cpu host -nographic -m 1024"
+qemu_params="-enable-kvm -cpu host -nographic -m 2G"
 linux_src="${1}"
 busybox_src="${2}"
 
@@ -44,16 +44,21 @@ cp $busybox_config "${busybox_build}/.config"
 make -C $busybox_src O=$busybox_build -j8
 make -C $busybox_src O=$busybox_build install
 
+make
+(cd userland && ninja)
+
 busybox_install="${busybox_build}/_install"
 initrd_build="${build_dir}/initrd"
 initrd_image="${build_dir}/initrd.cpio.gz"
 printf "Building initrd...\n"
+rm -rf $initrd_build || true
 mkdir -p $initrd_build
-cp -a $busybox_install/** $initrd_build
-cp -f $init_script "${initrd_build}/initrc"
+cp -a $busybox_install/* $initrd_build
+cp -f $init_script "${initrd_build}/init"
 install -m 644 -c *.ko $initrd_build
+install -m 644 -c userland/*.out $initrd_build
 (cd $initrd_build && find . -print0 | cpio --null -ov --format=newc | gzip -9 > $initrd_image)
 
 linux_image="${linux_build}/arch/x86_64/boot/bzImage"
 printf "Booting QEMU...\n"
-qemu-system-x86_64 $qemu_params -kernel $linux_image -initrd $initrd_image -append "console=ttyS0"
+qemu-system-x86_64 $qemu_params -kernel $linux_image -initrd $initrd_image -append "console=ttyS0 root=/dev/ram0 rootfstype=tmpfs rw"
