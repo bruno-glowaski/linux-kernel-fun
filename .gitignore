@@ -11,3 +11,5 @@ modules.order
 
 .ninja_log
 *.out
+
+build/
