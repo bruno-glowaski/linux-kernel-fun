@@ -1,4 +1,4 @@
-cflags = -Wall
+cflags = -Wall -static -static-libgcc
 
 rule cc
   command = gcc $cflags $in -o $out.out

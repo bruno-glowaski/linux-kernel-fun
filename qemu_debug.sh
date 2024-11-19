@@ -44,7 +44,7 @@ cp $busybox_config "${busybox_build}/.config"
 make -C $busybox_src O=$busybox_build -j8
 make -C $busybox_src O=$busybox_build install
 
-make
+make LINUX_SRC=${linux_build}
 (cd userland && ninja)
 
 busybox_install="${busybox_build}/_install"
