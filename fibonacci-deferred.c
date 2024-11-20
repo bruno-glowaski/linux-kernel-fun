@@ -64,7 +64,6 @@ static int fib_kthread(void *data) {
     schedule();
   }
 
-  vunmap(dst);
   unpin_user_page(page);
   return 0;
 }
@@ -98,19 +97,14 @@ static long fib_ioctl(struct file *file, unsigned int request,
     goto error_with_alloc;
   }
 
-  if ((task->dst = vmap(&task->page, 1, VM_WRITE | VM_READ, PAGE_SHARED)) ==
-      NULL) {
-    printk(KERN_INFO "Failed to vmap pages...\n");
-    r = -ENOMEM;
-    goto error_with_pinned_page;
-  }
+  task->dst = page_address(task->page);
+  printk(KERN_INFO "Mapped page %px to %px in kernel space...\n", usr_addr,
+         task->dst);
 
   kthread_run(fib_kthread, task, THREAD_NAME);
 
   return 0;
 
-error_with_pinned_page:
-  unpin_user_page(task->page);
 error_with_alloc:
   kfree(task);
   return r;
