@@ -7,7 +7,7 @@ linux_config="${configs_dir}/linux.config"
 busybox_config="${configs_dir}/busybox.config"
 init_script="${configs_dir}/init"
 build_dir="${PWD}/build"
-qemu_params="-enable-kvm -cpu host -nographic -m 2G"
+qemu_params="-enable-kvm -cpu host -nographic -m 2G -smp 4 -s"
 linux_src="${1}"
 busybox_src="${2}"
 
